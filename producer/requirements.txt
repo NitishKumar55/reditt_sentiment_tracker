@@ -1,1 +1,3 @@
+sseclient-py
 requests
+boto3

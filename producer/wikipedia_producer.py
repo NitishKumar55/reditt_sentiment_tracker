@@ -6,7 +6,7 @@ from sseclient import SSEClient
 
 # Configuration
 WIKI_STREAM_URL = "https://stream.wikimedia.org/v2/stream/recentchange"
-STREAM_NAME = "wikipedia_que "
+STREAM_NAME = "wikipedia_que"
 REGION = "ap-south-1"
 LANGUAGES = ["en"]  # only English Wikipedia, change to ["en", "hi"] for more
 USER_AGENT = "wiki-trend-engine/0.1 (nitish.k0596@gmail.com)"

@@ -5,7 +5,7 @@ import boto3
 
 SUBREDDITS = ["technology", "worldnews", "programming"]
 POLL_INTERVAL = 30
-USER_AGENT = "python:reddit-trend-engine:v0.1 (by /u/your_username)"
+USER_AGENT = "python:reddit-trend-engine:v0.1 (by /u/NitishKumar55)"
 STREAM_NAME = "reddit-events"
 REGION = "ap-south-1"
 

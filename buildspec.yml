@@ -1,0 +1,30 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing dependencies..."
+      - pip3 install --upgrade pip
+  
+  pre_build:
+    commands:
+      - echo "Build started on $(date)"
+      - echo "Source version - $CODEBUILD_RESOLVED_SOURCE_VERSION"
+  
+  build:
+    commands:
+      - echo "Syncing flink_job/ to S3..."
+      - aws s3 sync flink_job/ s3://nitish-wiki-monitor-code/flink_job/ --delete
+      
+      - echo "Syncing producer/ to S3..."
+      - aws s3 sync producer/ s3://nitish-wiki-monitor-code/producer/ --delete
+      
+      - echo "Syncing infra/ to S3..."
+      - aws s3 sync infra/ s3://nitish-wiki-monitor-code/infra/ --delete
+  
+  post_build:
+    commands:
+      - echo "Build completed on $(date)"
+      - echo "Code at s3://nitish-wiki-monitor-code/"

@@ -3,35 +3,42 @@ version: 0.2
 phases:
   install:
     runtime-versions:
+      java: corretto11
       python: 3.11
+  
+  pre_build:
+    commands:
+      - echo "Build started on $(date)"
+      - java -version
+      - mvn -version
   
   build:
     commands:
-      - echo "Cleaning lib..."
-      - rm -rf flink_job/lib
-      - mkdir -p flink_job/lib
-      - cd flink_job/lib
+      - echo "Building fat JAR with Maven..."
+      - mvn clean package -DskipTests
       
-      - echo "Downloading SQL Kinesis FAT connector (all deps bundled)..."
-      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-aws-kinesis-streams/5.0.0-1.20/flink-sql-connector-aws-kinesis-streams-5.0.0-1.20.jar
+      - echo "Verifying fat JAR..."
+      - ls -la target/
       
-      - echo "Downloading DynamoDB SQL FAT sink connector..."
-      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-dynamodb/5.0.0-1.20/flink-sql-connector-dynamodb-5.0.0-1.20.jar
-      
-      - echo "Verifying..."
-      - ls -la
-      - cd ../..
+      - echo "Preparing flink_app structure..."
+      - rm -rf flink_app_build
+      - mkdir -p flink_app_build/lib
+      - cp flink_job/wiki_monitor.py flink_app_build/
+      - cp target/flink-app.jar flink_app_build/lib/
       
       - echo "Zipping..."
-      - cd flink_job
+      - cd flink_app_build
       - zip -r ../flink_app.zip .
       - cd ..
       
-      - echo "Uploading..."
+      - echo "Uploading to S3..."
       - aws s3 cp flink_app.zip s3://nitish-wiki-monitor-code/flink_app.zip
+      
+      - echo "Syncing producer/ and infra/..."
       - aws s3 sync producer/ s3://nitish-wiki-monitor-code/producer/ --delete
       - aws s3 sync infra/ s3://nitish-wiki-monitor-code/infra/ --delete
   
   post_build:
     commands:
-      - echo "Build done."
+      - echo "Build completed."
+      - echo "Artifact uploaded to s3://nitish-wiki-monitor-code/flink_app.zip"

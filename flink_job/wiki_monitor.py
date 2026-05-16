@@ -1,5 +1,6 @@
 """
 Real-time Wikipedia Edit Monitor on AWS Managed Flink 1.20
+Using shaded fat JAR (built by Maven, contains all connector dependencies)
 """
 
 import os
@@ -19,34 +20,8 @@ def main():
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # Force parent-first classloader so user-provided JARs can find dependencies
-    t_env.get_config().set("classloader.resolve-order", "parent-first")
-
-    # Load both JARs via pipeline.jars
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    kinesis_jar = os.path.join(
-        current_dir, "lib", "flink-sql-connector-aws-kinesis-streams-5.0.0-1.20.jar"
-    )
-    dynamodb_jar = os.path.join(
-        current_dir, "lib", "flink-sql-connector-dynamodb-5.0.0-1.20.jar"
-    )
-
-    t_env.get_config().set(
-    "pipeline.jars",
-    f"{kinesis_jar};{dynamodb_jar}"  # No file:// prefix
-)
-    logger.info(f"Loaded Kinesis JAR: {kinesis_jar}")
-    logger.info(f"Loaded DynamoDB JAR: {dynamodb_jar}")
-
-    # Debug: confirm JARs exist on disk
-    lib_dir = os.path.join(current_dir, "lib")
-    if os.path.isdir(lib_dir):
-        for f in os.listdir(lib_dir):
-            full_path = os.path.join(lib_dir, f)
-            size = os.path.getsize(full_path)
-            logger.info(f"Found in lib/: {f} ({size} bytes)")
-    else:
-        logger.error(f"lib directory not found at {lib_dir}")
+    # The fat JAR is loaded via the 'jarfile' runtime property in Managed Flink config.
+    # No pipeline.jars needed — everything is shaded into one JAR.
 
     # Source: Kinesis stream
     t_env.execute_sql(f"""

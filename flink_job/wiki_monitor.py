@@ -10,11 +10,13 @@ Reads Wikipedia edit events from Kinesis and produces 3 outputs:
 import json
 import logging
 import boto3
+import time
 
 from pyflink.common import Types
 from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common.watermark_strategy import WatermarkStrategy
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.datastream.connectors.kinesis import FlinkKinesisConsumer
+from pyflink.datastream.connectors.kinesis import KinesisStreamsSource
 from pyflink.datastream.window import TumblingProcessingTimeWindows
 from pyflink.common.time import Time
 
@@ -24,6 +26,8 @@ logger = logging.getLogger(__name__)
 # Configuration
 STREAM_NAME = "wikipedia_que"
 REGION = "ap-south-1"
+ACCOUNT_ID = "141552609063"
+STREAM_ARN = f"arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}"
 WINDOW_SIZE_SECONDS = 60
 ANOMALY_THRESHOLD = 20
 TOP_N_PAGES = 10
@@ -57,18 +61,16 @@ def parse_event(json_str):
 # ─────────────────────────────────────────────────────────────
 def count_edits(a, b):
     """Reduce: sum total and bot counts within a window."""
-    # tuple format: (wiki, total_count, bot_count)
     return (a[0], a[1] + b[1], a[2] + b[2])
 
 
 def count_page_edits(a, b):
     """Reduce: sum edit counts per page."""
-    # tuple format: (page, wiki, count)
     return (a[0], a[1], a[2] + b[2])
 
 
 # ─────────────────────────────────────────────────────────────
-# DynamoDB sink (called from map operators)
+# DynamoDB sink helpers
 # ─────────────────────────────────────────────────────────────
 _dynamo = None
 
@@ -77,6 +79,10 @@ def get_dynamo():
     if _dynamo is None:
         _dynamo = boto3.client("dynamodb", region_name=REGION)
     return _dynamo
+
+
+def _current_window_ts():
+    return str(int(time.time() // WINDOW_SIZE_SECONDS) * WINDOW_SIZE_SECONDS)
 
 
 def write_edit_metric(record):
@@ -122,7 +128,7 @@ def write_anomaly_if_needed(record):
 
 
 def write_page_count(record):
-    """record = (page, wiki, count) — write all page counts; top-N can be queried later."""
+    """record = (page, wiki, count)"""
     page, wiki, count = record
     try:
         get_dynamo().put_item(
@@ -139,12 +145,6 @@ def write_page_count(record):
     return record
 
 
-def _current_window_ts():
-    """Helper to get current minute as a window-end approximation."""
-    import time
-    return str(int(time.time() // WINDOW_SIZE_SECONDS) * WINDOW_SIZE_SECONDS)
-
-
 # ─────────────────────────────────────────────────────────────
 # Main pipeline
 # ─────────────────────────────────────────────────────────────
@@ -152,13 +152,20 @@ def build_pipeline():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(2)
 
-    # Kinesis source
-    kinesis_props = {
-        "aws.region": REGION,
-        "flink.stream.initpos": "LATEST",
-    }
-    source = FlinkKinesisConsumer(STREAM_NAME, SimpleStringSchema(), kinesis_props)
-    raw_stream = env.add_source(source).name("kinesis-source")
+    # Create Kinesis source using new builder API
+    source = (
+        KinesisStreamsSource.builder()
+        .set_stream_arn(STREAM_ARN)
+        .set_deserialization_schema(SimpleStringSchema())
+        .set_aws_region(REGION)
+        .build()
+    )
+
+    raw_stream = env.from_source(
+        source,
+        WatermarkStrategy.no_watermarks(),
+        "kinesis-source"
+    )
 
     # Parse and filter once, reuse for all outputs
     parsed = (
@@ -183,7 +190,6 @@ def build_pipeline():
 
     # ───────────────────────────────────────
     # Output 2: Anomalies + Top pages
-    # Both use the same per-page count, so compute once
     # ───────────────────────────────────────
     page_counts = (
         parsed

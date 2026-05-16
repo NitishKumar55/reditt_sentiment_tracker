@@ -1,6 +1,6 @@
 """
 Real-time Wikipedia Edit Monitor on AWS Managed Flink 1.20
-Using shaded fat JAR (built by Maven, contains all connector dependencies)
+Using kinesis-legacy connector to avoid v5 NullPointerException bug
 """
 
 import os
@@ -12,18 +12,13 @@ logger = logging.getLogger(__name__)
 
 STREAM_NAME = "wikipedia_que"
 REGION = "ap-south-1"
-ACCOUNT_ID = "141552609063"
-STREAM_ARN = f"arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}"
 
 
 def main():
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # The fat JAR is loaded via the 'jarfile' runtime property in Managed Flink config.
-    # No pipeline.jars needed — everything is shaded into one JAR.
-
-    # Source: Kinesis stream
+    # Source: Kinesis stream (using kinesis-legacy due to v5 NPE bug)
     t_env.execute_sql(f"""
         CREATE TABLE wiki_events (
             id BIGINT,
@@ -36,10 +31,10 @@ def main():
             `timestamp` BIGINT,
             event_time AS PROCTIME()
         ) WITH (
-            'connector' = 'kinesis',
-            'stream.arn' = '{STREAM_ARN}',
+            'connector' = 'kinesis-legacy',
+            'stream' = '{STREAM_NAME}',
             'aws.region' = '{REGION}',
-            'source.init.position' = 'LATEST',
+            'scan.stream.initpos' = 'LATEST',
             'format' = 'json',
             'json.ignore-parse-errors' = 'true'
         )

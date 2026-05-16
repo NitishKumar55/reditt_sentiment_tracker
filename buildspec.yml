@@ -5,44 +5,33 @@ phases:
     runtime-versions:
       python: 3.11
   
-  pre_build:
-    commands:
-      - echo "Build started on $(date)"
-  
   build:
     commands:
-      - echo "Cleaning lib folder..."
+      - echo "Cleaning lib..."
       - rm -rf flink_job/lib
       - mkdir -p flink_job/lib
       - cd flink_job/lib
       
-      - echo "Downloading SQL Kinesis connector..."
-      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kinesis/4.2.0-1.18/flink-sql-connector-kinesis-4.2.0-1.18.jar
+      - echo "Downloading Kinesis SQL connector for Flink 1.20..."
+      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kinesis/5.0.0-1.20/flink-sql-connector-kinesis-5.0.0-1.20.jar
       
-      - echo "Downloading DataStream Kinesis connector..."
-      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-kinesis/4.2.0-1.18/flink-connector-kinesis-4.2.0-1.18.jar
+      - echo "Downloading DynamoDB SQL connector for Flink 1.20..."
+      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-dynamodb/5.0.0-1.20/flink-sql-connector-dynamodb-5.0.0-1.20.jar
       
-      - echo "Downloading DynamoDB SQL connector..."
-      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-dynamodb/4.2.0-1.18/flink-sql-connector-dynamodb-4.2.0-1.18.jar
-      
-      - echo "Verifying JARs..."
+      - echo "Verifying..."
       - ls -la
       - cd ../..
       
-      - echo "Zipping flink_job..."
+      - echo "Zipping..."
       - cd flink_job
       - zip -r ../flink_app.zip .
       - cd ..
       
-      - echo "Uploading to S3..."
+      - echo "Uploading..."
       - aws s3 cp flink_app.zip s3://nitish-wiki-monitor-code/flink_app.zip
-      
-      - echo "Syncing producer/ to S3..."
       - aws s3 sync producer/ s3://nitish-wiki-monitor-code/producer/ --delete
-      
-      - echo "Syncing infra/ to S3..."
       - aws s3 sync infra/ s3://nitish-wiki-monitor-code/infra/ --delete
   
   post_build:
     commands:
-      - echo "Build completed."
+      - echo "Build done."

@@ -1,5 +1,5 @@
 """
-Real-time Wikipedia Edit Monitor on AWS Managed Flink
+Real-time Wikipedia Edit Monitor on AWS Managed Flink 1.20
 """
 
 import os
@@ -17,23 +17,12 @@ def main():
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # The SQL connector JAR is loaded via the 'jarfile' runtime property.
-    # We additionally load the DataStream Kinesis JAR (for FlinkKinesisConsumer class)
-    # and the DynamoDB sink JAR via pipeline.jars.
+    # Load DynamoDB JAR (Kinesis JAR loaded via 'jarfile' property in console)
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    
-    kinesis_ds_jar = os.path.join(
-        current_dir, "lib", "flink-connector-kinesis-4.2.0-1.18.jar"
-    )
     dynamodb_jar = os.path.join(
-        current_dir, "lib", "flink-sql-connector-dynamodb-4.2.0-1.18.jar"
+        current_dir, "lib", "flink-sql-connector-dynamodb-5.0.0-1.20.jar"
     )
-    
-    t_env.get_config().set(
-        "pipeline.jars",
-        f"file://{kinesis_ds_jar};file://{dynamodb_jar}"
-    )
-    logger.info(f"Loaded extra JARs: {kinesis_ds_jar}, {dynamodb_jar}")
+    t_env.get_config().set("pipeline.jars", f"file://{dynamodb_jar}")
 
     # Source: Kinesis stream
     t_env.execute_sql(f"""
@@ -49,11 +38,11 @@ def main():
             event_time AS PROCTIME()
         ) WITH (
             'connector' = 'kinesis',
-            'stream' = '{STREAM_NAME}',
+            'stream.arn' = 'arn:aws:kinesis:{REGION}:141552609063:stream/{STREAM_NAME}',
             'aws.region' = '{REGION}',
-            'scan.stream.initpos' = 'LATEST',
-            'format' = 'json',
-            'json.ignore-parse-errors' = 'true'
+            'source.init.position' = 'LATEST',
+            'value.format' = 'json',
+            'value.json.ignore-parse-errors' = 'true'
         )
     """)
 

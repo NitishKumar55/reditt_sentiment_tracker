@@ -1,48 +1,30 @@
 """
 Real-time Wikipedia Edit Monitor on AWS Managed Flink
-
-This Flink job:
-  1. Reads Wikipedia edit events from a Kinesis data stream
-  2. Computes 1-minute tumbling window aggregations
-  3. Writes 3 outputs to DynamoDB:
-     - wiki-edit-metrics: edits per minute by wiki + bot ratio
-     - wiki-top-pages: edit counts per page per window
-     - wiki-anomalies: pages with > 20 edits in a minute
 """
 
 import os
 import logging
-
 from pyflink.table import EnvironmentSettings, TableEnvironment
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration
-STREAM_NAME = "wikipedia_que"
+STREAM_NAME = "wikipedia-que"
 REGION = "ap-south-1"
 
 
 def main():
-    # Set up Table environment in streaming mode
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # Load connector JARs from the lib/ folder (bundled in zip artifact)
+    # Load DynamoDB connector JAR via pipeline.jars
+    # (Kinesis JAR is loaded via the 'jarfile' runtime property in Managed Flink config)
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    kinesis_jar = os.path.join(
-        current_dir, "lib", "flink-sql-connector-aws-kinesis-streams-4.2.0-1.18.jar"
-    )
     dynamodb_jar = os.path.join(
         current_dir, "lib", "flink-sql-connector-dynamodb-4.2.0-1.18.jar"
     )
-
-    t_env.get_config().set(
-        "pipeline.jars",
-        f"file://{kinesis_jar};file://{dynamodb_jar}"
-    )
-
-    logger.info(f"Loaded JARs: {kinesis_jar}, {dynamodb_jar}")
+    t_env.get_config().set("pipeline.jars", f"file://{dynamodb_jar}")
+    logger.info(f"Loaded DynamoDB JAR: {dynamodb_jar}")
 
     # ─────────────────────────────────────────────────────────
     # Source: Kinesis stream (Wikipedia events)
@@ -69,7 +51,7 @@ def main():
     """)
 
     # ─────────────────────────────────────────────────────────
-    # Sink 1: Edit metrics per wiki to DynamoDB
+    # Sink 1: Edit metrics per wiki
     # ─────────────────────────────────────────────────────────
     t_env.execute_sql(f"""
         CREATE TABLE wiki_edit_metrics_sink (
@@ -87,7 +69,7 @@ def main():
     """)
 
     # ─────────────────────────────────────────────────────────
-    # Sink 2: Top edited pages per window to DynamoDB
+    # Sink 2: Top edited pages
     # ─────────────────────────────────────────────────────────
     t_env.execute_sql(f"""
         CREATE TABLE wiki_top_pages_sink (
@@ -104,7 +86,7 @@ def main():
     """)
 
     # ─────────────────────────────────────────────────────────
-    # Sink 3: Anomaly pages (>20 edits in a minute)
+    # Sink 3: Anomalies (pages with >20 edits in a minute)
     # ─────────────────────────────────────────────────────────
     t_env.execute_sql(f"""
         CREATE TABLE wiki_anomalies_sink (
@@ -121,9 +103,7 @@ def main():
         )
     """)
 
-    # ─────────────────────────────────────────────────────────
-    # Insert query 1: Edit metrics per wiki
-    # ─────────────────────────────────────────────────────────
+    # Run all 3 inserts as a single Flink job
     statement_set = t_env.create_statement_set()
 
     statement_set.add_insert_sql("""
@@ -141,7 +121,6 @@ def main():
         GROUP BY wiki, window_start, window_end
     """)
 
-    # Insert query 2: Top pages
     statement_set.add_insert_sql("""
         INSERT INTO wiki_top_pages_sink
         SELECT
@@ -156,7 +135,6 @@ def main():
         GROUP BY title, wiki, window_start, window_end
     """)
 
-    # Insert query 3: Anomalies
     statement_set.add_insert_sql("""
         INSERT INTO wiki_anomalies_sink
         SELECT
@@ -176,7 +154,6 @@ def main():
         HAVING COUNT(*) > 20
     """)
 
-    # Execute all 3 inserts as a single Flink job
     statement_set.execute()
 
 

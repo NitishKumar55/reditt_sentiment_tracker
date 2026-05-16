@@ -11,13 +11,14 @@ logger = logging.getLogger(__name__)
 
 STREAM_NAME = "wikipedia-que"
 REGION = "ap-south-1"
+ACCOUNT_ID = "141552609063"
 
 
 def main():
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # Load DynamoDB JAR (Kinesis JAR loaded via 'jarfile' property in console)
+    # Load DynamoDB JAR (Kinesis JAR is loaded via 'jarfile' runtime property)
     current_dir = os.path.dirname(os.path.realpath(__file__))
     dynamodb_jar = os.path.join(
         current_dir, "lib", "flink-sql-connector-dynamodb-5.0.0-1.20.jar"
@@ -38,11 +39,11 @@ def main():
             event_time AS PROCTIME()
         ) WITH (
             'connector' = 'kinesis',
-            'stream.arn' = 'arn:aws:kinesis:{REGION}:141552609063:stream/{STREAM_NAME}',
+            'stream.arn' = 'arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}',
             'aws.region' = '{REGION}',
             'source.init.position' = 'LATEST',
-            'value.format' = 'json',
-            'value.json.ignore-parse-errors' = 'true'
+            'format' = 'json',
+            'json.ignore-parse-errors' = 'true'
         )
     """)
 

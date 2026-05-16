@@ -17,18 +17,25 @@ def main():
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # Load DynamoDB connector JAR via pipeline.jars
-    # (Kinesis JAR is loaded via the 'jarfile' runtime property in Managed Flink config)
+    # The SQL connector JAR is loaded via the 'jarfile' runtime property.
+    # We additionally load the DataStream Kinesis JAR (for FlinkKinesisConsumer class)
+    # and the DynamoDB sink JAR via pipeline.jars.
     current_dir = os.path.dirname(os.path.realpath(__file__))
+    
+    kinesis_ds_jar = os.path.join(
+        current_dir, "lib", "flink-connector-kinesis-4.2.0-1.18.jar"
+    )
     dynamodb_jar = os.path.join(
         current_dir, "lib", "flink-sql-connector-dynamodb-4.2.0-1.18.jar"
     )
-    t_env.get_config().set("pipeline.jars", f"file://{dynamodb_jar}")
-    logger.info(f"Loaded DynamoDB JAR: {dynamodb_jar}")
+    
+    t_env.get_config().set(
+        "pipeline.jars",
+        f"file://{kinesis_ds_jar};file://{dynamodb_jar}"
+    )
+    logger.info(f"Loaded extra JARs: {kinesis_ds_jar}, {dynamodb_jar}")
 
-    # ─────────────────────────────────────────────────────────
-    # Source: Kinesis stream (Wikipedia events)
-    # ─────────────────────────────────────────────────────────
+    # Source: Kinesis stream
     t_env.execute_sql(f"""
         CREATE TABLE wiki_events (
             id BIGINT,
@@ -50,9 +57,7 @@ def main():
         )
     """)
 
-    # ─────────────────────────────────────────────────────────
-    # Sink 1: Edit metrics per wiki
-    # ─────────────────────────────────────────────────────────
+    # Sink 1: Edit metrics
     t_env.execute_sql(f"""
         CREATE TABLE wiki_edit_metrics_sink (
             wiki STRING,
@@ -68,9 +73,7 @@ def main():
         )
     """)
 
-    # ─────────────────────────────────────────────────────────
-    # Sink 2: Top edited pages
-    # ─────────────────────────────────────────────────────────
+    # Sink 2: Top pages
     t_env.execute_sql(f"""
         CREATE TABLE wiki_top_pages_sink (
             page_title STRING,
@@ -85,9 +88,7 @@ def main():
         )
     """)
 
-    # ─────────────────────────────────────────────────────────
-    # Sink 3: Anomalies (pages with >20 edits in a minute)
-    # ─────────────────────────────────────────────────────────
+    # Sink 3: Anomalies
     t_env.execute_sql(f"""
         CREATE TABLE wiki_anomalies_sink (
             page_title STRING,
@@ -103,7 +104,6 @@ def main():
         )
     """)
 
-    # Run all 3 inserts as a single Flink job
     statement_set = t_env.create_statement_set()
 
     statement_set.add_insert_sql("""

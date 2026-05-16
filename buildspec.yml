@@ -14,10 +14,13 @@ phases:
       - echo "Cleaning lib folder..."
       - rm -rf flink_job/lib
       - mkdir -p flink_job/lib
-      
-      - echo "Downloading Kinesis SQL connector..."
       - cd flink_job/lib
+      
+      - echo "Downloading SQL Kinesis connector..."
       - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kinesis/4.2.0-1.18/flink-sql-connector-kinesis-4.2.0-1.18.jar
+      
+      - echo "Downloading DataStream Kinesis connector..."
+      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-kinesis/4.2.0-1.18/flink-connector-kinesis-4.2.0-1.18.jar
       
       - echo "Downloading DynamoDB SQL connector..."
       - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-dynamodb/4.2.0-1.18/flink-sql-connector-dynamodb-4.2.0-1.18.jar
@@ -31,7 +34,7 @@ phases:
       - zip -r ../flink_app.zip .
       - cd ..
       
-      - echo "Uploading flink_app.zip to S3..."
+      - echo "Uploading to S3..."
       - aws s3 cp flink_app.zip s3://nitish-wiki-monitor-code/flink_app.zip
       
       - echo "Syncing producer/ to S3..."
@@ -42,4 +45,4 @@ phases:
   
   post_build:
     commands:
-      - echo "Build completed on $(date)"
+      - echo "Build completed."

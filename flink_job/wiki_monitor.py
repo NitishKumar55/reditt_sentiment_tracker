@@ -10,7 +10,7 @@ from pyflink.table import EnvironmentSettings, TableEnvironment
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-STREAM_NAME = "wikipedia-que"
+STREAM_NAME = "wikipedia_que"
 REGION = "ap-south-1"
 ACCOUNT_ID = "141552609063"
 STREAM_ARN = f"arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}"

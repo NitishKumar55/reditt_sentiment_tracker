@@ -11,19 +11,25 @@ phases:
   
   build:
     commands:
-      - echo "Zipping flink_app directory..."
-      - cd flink_app
+      - echo "Downloading JARs..."
+      - mkdir -p flink_job/lib
+      - cd flink_job/lib
+      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-aws-kinesis-streams/4.2.0-1.18/flink-sql-connector-aws-kinesis-streams-4.2.0-1.18.jar
+      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-dynamodb/4.2.0-1.18/flink-sql-connector-dynamodb-4.2.0-1.18.jar
+      - cd ../..
+      
+      - echo "Zipping flink_job directory..."
+      - cd flink_job
       - zip -r ../flink_app.zip .
       - cd ..
       
-      - echo "Uploading zipped artifact to S3..."
+      - echo "Uploading artifact to S3..."
       - aws s3 cp flink_app.zip s3://nitish-wiki-monitor-code/flink_app.zip
       
-      - echo "Syncing other code (producer, infra) to S3..."
+      - echo "Syncing other code to S3..."
       - aws s3 sync producer/ s3://nitish-wiki-monitor-code/producer/ --delete
       - aws s3 sync infra/ s3://nitish-wiki-monitor-code/infra/ --delete
   
   post_build:
     commands:
       - echo "Build completed."
-      - echo "Artifact at s3://nitish-wiki-monitor-code/flink_app.zip"

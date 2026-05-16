@@ -1,10 +1,5 @@
 """
 Real-time Wikipedia Edit Monitoring Pipeline
-
-Reads Wikipedia edit events from Kinesis and produces 3 outputs:
-  1. Edit volume metrics: edits per minute by wiki, with bot ratio
-  2. Anomaly detection: pages getting > 20 edits / minute
-  3. Top-edited pages per window
 """
 
 import json
@@ -14,64 +9,41 @@ import time
 
 from pyflink.common import Types
 from pyflink.common.serialization import SimpleStringSchema
-from pyflink.common.watermark_strategy import WatermarkStrategy
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.datastream.connectors.kinesis import KinesisStreamsSource
+from pyflink.datastream.connectors.kinesis import FlinkKinesisConsumer
 from pyflink.datastream.window import TumblingProcessingTimeWindows
 from pyflink.common.time import Time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration
-STREAM_NAME = "wikipedia_que"
+STREAM_NAME = "wiki-events"
 REGION = "ap-south-1"
-ACCOUNT_ID = "141552609063"
-STREAM_ARN = f"arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}"
 WINDOW_SIZE_SECONDS = 60
 ANOMALY_THRESHOLD = 20
-TOP_N_PAGES = 10
 
 
-# ─────────────────────────────────────────────────────────────
-# Parsing
-# ─────────────────────────────────────────────────────────────
 def parse_event(json_str):
-    """Parse incoming Kinesis record. Returns None if invalid/uninteresting."""
     try:
         e = json.loads(json_str)
-        
         if e.get("type") not in ("edit", "new"):
             return None
         if e.get("namespace") != 0:
             return None
-        
-        wiki = e.get("wiki", "unknown")
-        page = e.get("title", "untitled")
-        user = e.get("user", "anonymous")
-        is_bot = 1 if e.get("bot") else 0
-        
-        return (wiki, page, user, is_bot)
+        return (e.get("wiki", "unknown"), e.get("title", "untitled"),
+                e.get("user", "anonymous"), 1 if e.get("bot") else 0)
     except Exception:
         return None
 
 
-# ─────────────────────────────────────────────────────────────
-# Aggregation functions (reduce-style)
-# ─────────────────────────────────────────────────────────────
 def count_edits(a, b):
-    """Reduce: sum total and bot counts within a window."""
     return (a[0], a[1] + b[1], a[2] + b[2])
 
 
 def count_page_edits(a, b):
-    """Reduce: sum edit counts per page."""
     return (a[0], a[1], a[2] + b[2])
 
 
-# ─────────────────────────────────────────────────────────────
-# DynamoDB sink helpers
-# ─────────────────────────────────────────────────────────────
 _dynamo = None
 
 def get_dynamo():
@@ -86,7 +58,6 @@ def _current_window_ts():
 
 
 def write_edit_metric(record):
-    """record = (wiki, total_edits, bot_edits)"""
     wiki, total, bots = record
     try:
         get_dynamo().put_item(
@@ -106,7 +77,6 @@ def write_edit_metric(record):
 
 
 def write_anomaly_if_needed(record):
-    """record = (page, wiki, count)"""
     page, wiki, count = record
     if count < ANOMALY_THRESHOLD:
         return record
@@ -121,14 +91,12 @@ def write_anomaly_if_needed(record):
                 "severity": {"S": "high" if count > 50 else "medium"},
             },
         )
-        logger.info(f"ANOMALY: {page} got {count} edits")
     except Exception as e:
         logger.error(f"Failed writing anomaly: {e}")
     return record
 
 
 def write_page_count(record):
-    """record = (page, wiki, count)"""
     page, wiki, count = record
     try:
         get_dynamo().put_item(
@@ -145,29 +113,18 @@ def write_page_count(record):
     return record
 
 
-# ─────────────────────────────────────────────────────────────
-# Main pipeline
-# ─────────────────────────────────────────────────────────────
 def build_pipeline():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(2)
 
-    # Create Kinesis source using new builder API
-    source = (
-        KinesisStreamsSource.builder()
-        .set_stream_arn(STREAM_ARN)
-        .set_deserialization_schema(SimpleStringSchema())
-        .set_aws_region(REGION)
-        .build()
-    )
+    kinesis_props = {
+        "aws.region": REGION,
+        "flink.stream.initpos": "LATEST",
+    }
+    
+    source = FlinkKinesisConsumer(STREAM_NAME, SimpleStringSchema(), kinesis_props)
+    raw_stream = env.add_source(source).name("kinesis-source")
 
-    raw_stream = env.from_source(
-        source,
-        WatermarkStrategy.no_watermarks(),
-        "kinesis-source"
-    )
-
-    # Parse and filter once, reuse for all outputs
     parsed = (
         raw_stream
         .map(parse_event)
@@ -175,12 +132,10 @@ def build_pipeline():
         .name("parsed-events")
     )
 
-    # ───────────────────────────────────────
-    # Output 1: Edit metrics by wiki
-    # ───────────────────────────────────────
+    # Edit metrics by wiki
     (
         parsed
-        .map(lambda x: (x[0], 1, x[3]))  # (wiki, 1, is_bot)
+        .map(lambda x: (x[0], 1, x[3]))
         .key_by(lambda x: x[0])
         .window(TumblingProcessingTimeWindows.of(Time.seconds(WINDOW_SIZE_SECONDS)))
         .reduce(count_edits)
@@ -188,21 +143,16 @@ def build_pipeline():
         .name("edit-metrics")
     )
 
-    # ───────────────────────────────────────
-    # Output 2: Anomalies + Top pages
-    # ───────────────────────────────────────
+    # Anomalies + Top pages
     page_counts = (
         parsed
-        .map(lambda x: (x[1], x[0], 1))  # (page, wiki, 1)
+        .map(lambda x: (x[1], x[0], 1))
         .key_by(lambda x: x[0])
         .window(TumblingProcessingTimeWindows.of(Time.seconds(WINDOW_SIZE_SECONDS)))
         .reduce(count_page_edits)
     )
 
-    # Anomalies: flag if count > threshold
     page_counts.map(write_anomaly_if_needed).name("anomalies")
-
-    # Top pages: write all counts, query top-N later from DynamoDB
     page_counts.map(write_page_count).name("page-counts")
 
     env.execute("wiki-edit-monitor")

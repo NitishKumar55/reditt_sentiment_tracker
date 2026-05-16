@@ -51,6 +51,7 @@ def main():
 )
 
     logger.info("Loaded Kinesis and DynamoDB connector JARs")
+    t_env.get_config().set("table.exec.resource.default-parallelism", "1")
 
     t_env.execute_sql(f"""
         CREATE TABLE wiki_events (
@@ -65,7 +66,7 @@ def main():
             event_time AS PROCTIME()
         ) WITH (
             'connector' = 'kinesis',
-            'stream.arn' = '{STREAM_ARN}',
+            'stream' = '{STREAM_ARN}',
             'aws.region' = '{REGION}',
             'source.init.position' = 'LATEST',
             'format' = 'json',

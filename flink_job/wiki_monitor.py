@@ -12,19 +12,41 @@ logger = logging.getLogger(__name__)
 STREAM_NAME = "wikipedia-que"
 REGION = "ap-south-1"
 ACCOUNT_ID = "141552609063"
-STREAM_ARN = f"arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}"
+
+STREAM_ARN = (
+    f"arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}"
+)
 
 
 def main():
-    env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+
+    env_settings = EnvironmentSettings.new_instance() \
+        .in_streaming_mode() \
+        .build()
+
     t_env = TableEnvironment.create(env_settings)
 
-    # Load DynamoDB JAR (Kinesis JAR loaded via 'jarfile' runtime property)
+    # Load connector JARs from local lib folder
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    dynamodb_jar = os.path.join(
-        current_dir, "lib", "flink-sql-connector-dynamodb-5.0.0-1.20.jar"
+
+    kinesis_jar = os.path.join(
+        current_dir,
+        "lib",
+        "flink-sql-connector-aws-kinesis-streams-5.0.0-1.20.jar"
     )
-    t_env.get_config().set("pipeline.jars", f"file://{dynamodb_jar}")
+
+    dynamodb_jar = os.path.join(
+        current_dir,
+        "lib",
+        "flink-sql-connector-dynamodb-5.0.0-1.20.jar"
+    )
+
+    t_env.get_config().set(
+        "pipeline.jars",
+        f"file://{kinesis_jar};file://{dynamodb_jar}"
+    )
+
+    logger.info("Loaded Kinesis and DynamoDB connector JARs")
 
     t_env.execute_sql(f"""
         CREATE TABLE wiki_events (
@@ -104,7 +126,8 @@ def main():
         FROM TABLE(
             TUMBLE(TABLE wiki_events, DESCRIPTOR(event_time), INTERVAL '1' MINUTE)
         )
-        WHERE type IN ('edit', 'new') AND `namespace` = 0
+        WHERE type IN ('edit', 'new')
+          AND `namespace` = 0
         GROUP BY wiki, window_start, window_end
     """)
 
@@ -118,7 +141,8 @@ def main():
         FROM TABLE(
             TUMBLE(TABLE wiki_events, DESCRIPTOR(event_time), INTERVAL '1' MINUTE)
         )
-        WHERE type IN ('edit', 'new') AND `namespace` = 0
+        WHERE type IN ('edit', 'new')
+          AND `namespace` = 0
         GROUP BY title, wiki, window_start, window_end
     """)
 
@@ -129,19 +153,22 @@ def main():
             wiki,
             CAST(window_end AS STRING) AS window_end,
             COUNT(*) AS edit_count,
-            CASE 
+            CASE
                 WHEN COUNT(*) > 50 THEN 'high'
                 ELSE 'medium'
             END AS severity
         FROM TABLE(
             TUMBLE(TABLE wiki_events, DESCRIPTOR(event_time), INTERVAL '1' MINUTE)
         )
-        WHERE type IN ('edit', 'new') AND `namespace` = 0
+        WHERE type IN ('edit', 'new')
+          AND `namespace` = 0
         GROUP BY title, wiki, window_start, window_end
         HAVING COUNT(*) > 20
     """)
 
-    statement_set.execute()
+    logger.info("Starting Flink job")
+
+    statement_set.execute().wait()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """
 Real-time Wikipedia Edit Monitor on AWS Managed Flink 1.20
-Using kinesis-legacy connector to avoid v5 NullPointerException bug
+Using v5 Kinesis connector (KinesisStreamsSource) via Maven fat JAR
 """
 
 import os
@@ -12,13 +12,17 @@ logger = logging.getLogger(__name__)
 
 STREAM_NAME = "wikipedia_que"
 REGION = "ap-south-1"
+ACCOUNT_ID = "141552609063"
+STREAM_ARN = f"arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}"
 
 
 def main():
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # Source: Kinesis stream (using kinesis-legacy due to v5 NPE bug)
+    logger.info(f"Using stream ARN: {STREAM_ARN}")
+
+    # Source: Kinesis stream (v5 connector)
     t_env.execute_sql(f"""
         CREATE TABLE wiki_events (
             id BIGINT,
@@ -31,16 +35,16 @@ def main():
             `timestamp` BIGINT,
             event_time AS PROCTIME()
         ) WITH (
-            'connector' = 'kinesis-legacy',
-            'stream' = '{STREAM_NAME}',
+            'connector' = 'kinesis',
+            'stream.arn' = '{STREAM_ARN}',
             'aws.region' = '{REGION}',
-            'scan.stream.initpos' = 'LATEST',
+            'source.init.position' = 'LATEST',
             'format' = 'json',
             'json.ignore-parse-errors' = 'true'
         )
     """)
 
-    # Sink 1: Edit metrics
+    # Sink 1: Edit metrics by wiki
     t_env.execute_sql(f"""
         CREATE TABLE wiki_edit_metrics_sink (
             wiki STRING,
@@ -56,7 +60,7 @@ def main():
         )
     """)
 
-    # Sink 2: Top pages
+    # Sink 2: Top edited pages per window
     t_env.execute_sql(f"""
         CREATE TABLE wiki_top_pages_sink (
             page_title STRING,
@@ -71,7 +75,7 @@ def main():
         )
     """)
 
-    # Sink 3: Anomalies
+    # Sink 3: Anomalies (pages with > 20 edits per minute)
     t_env.execute_sql(f"""
         CREATE TABLE wiki_anomalies_sink (
             page_title STRING,
@@ -87,6 +91,7 @@ def main():
         )
     """)
 
+    # Run all 3 inserts as one Flink job
     statement_set = t_env.create_statement_set()
 
     statement_set.add_insert_sql("""

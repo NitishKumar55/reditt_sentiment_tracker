@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 APPLICATION_PROPERTIES_FILE_PATH = "/etc/flink/application_properties.json"
 
 # Defaults — Managed Flink overrides these from app properties
-STREAM_NAME = os.environ.get("STREAM_NAME", "wiki-events")
+STREAM_NAME = os.environ.get("STREAM_NAME", "wikipedia_que")
 REGION = os.environ.get("REGION", "ap-south-1")
 
 

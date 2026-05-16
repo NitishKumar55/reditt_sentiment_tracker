@@ -19,7 +19,10 @@ def main():
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # Load BOTH JARs via pipeline.jars
+    # Force parent-first classloader so user-provided JARs can find dependencies
+    t_env.get_config().set("classloader.resolve-order", "parent-first")
+
+    # Load both JARs via pipeline.jars
     current_dir = os.path.dirname(os.path.realpath(__file__))
     kinesis_jar = os.path.join(
         current_dir, "lib", "flink-sql-connector-aws-kinesis-streams-5.0.0-1.20.jar"
@@ -27,7 +30,7 @@ def main():
     dynamodb_jar = os.path.join(
         current_dir, "lib", "flink-sql-connector-dynamodb-5.0.0-1.20.jar"
     )
-    
+
     t_env.get_config().set(
         "pipeline.jars",
         f"file://{kinesis_jar};file://{dynamodb_jar}"
@@ -35,6 +38,17 @@ def main():
     logger.info(f"Loaded Kinesis JAR: {kinesis_jar}")
     logger.info(f"Loaded DynamoDB JAR: {dynamodb_jar}")
 
+    # Debug: confirm JARs exist on disk
+    lib_dir = os.path.join(current_dir, "lib")
+    if os.path.isdir(lib_dir):
+        for f in os.listdir(lib_dir):
+            full_path = os.path.join(lib_dir, f)
+            size = os.path.getsize(full_path)
+            logger.info(f"Found in lib/: {f} ({size} bytes)")
+    else:
+        logger.error(f"lib directory not found at {lib_dir}")
+
+    # Source: Kinesis stream
     t_env.execute_sql(f"""
         CREATE TABLE wiki_events (
             id BIGINT,
@@ -56,6 +70,7 @@ def main():
         )
     """)
 
+    # Sink 1: Edit metrics
     t_env.execute_sql(f"""
         CREATE TABLE wiki_edit_metrics_sink (
             wiki STRING,
@@ -71,6 +86,7 @@ def main():
         )
     """)
 
+    # Sink 2: Top pages
     t_env.execute_sql(f"""
         CREATE TABLE wiki_top_pages_sink (
             page_title STRING,
@@ -85,6 +101,7 @@ def main():
         )
     """)
 
+    # Sink 3: Anomalies
     t_env.execute_sql(f"""
         CREATE TABLE wiki_anomalies_sink (
             page_title STRING,

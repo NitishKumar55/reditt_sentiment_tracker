@@ -66,9 +66,14 @@ def main():
             event_time AS PROCTIME()
         ) WITH (
             'connector' = 'kinesis',
-            'stream' = '{STREAM_ARN}',
+            'stream' = '{STREAM_NAME}',
             'aws.region' = '{REGION}',
             'source.init.position' = 'LATEST',
+            'scan.shard.subscribetoshard.maxretries' = '50',
+            'scan.shard.subscribetoshard.backoff.base' = '1000',
+            'scan.shard.subscribetoshard.backoff.max' = '10000',
+            'scan.shard.getrecords.maxretries' = '10',
+            'scan.shard.getrecords.backoff.base' = '1000',
             'format' = 'json',
             'json.ignore-parse-errors' = 'true'
         )

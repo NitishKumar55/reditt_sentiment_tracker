@@ -32,9 +32,9 @@ def main():
     )
 
     t_env.get_config().set(
-        "pipeline.jars",
-        f"file://{kinesis_jar};file://{dynamodb_jar}"
-    )
+    "pipeline.jars",
+    f"{kinesis_jar};{dynamodb_jar}"  # No file:// prefix
+)
     logger.info(f"Loaded Kinesis JAR: {kinesis_jar}")
     logger.info(f"Loaded DynamoDB JAR: {dynamodb_jar}")
 

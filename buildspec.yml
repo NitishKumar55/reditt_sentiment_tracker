@@ -4,27 +4,26 @@ phases:
   install:
     runtime-versions:
       python: 3.11
-    commands:
-      - echo "Installing dependencies..."
-      - pip3 install --upgrade pip
   
   pre_build:
     commands:
       - echo "Build started on $(date)"
-      - echo "Source version - $CODEBUILD_RESOLVED_SOURCE_VERSION"
   
   build:
     commands:
-      - echo "Syncing flink_job/ to S3..."
-      - aws s3 sync flink_job/ s3://nitish-wiki-monitor-code/flink_job/ --delete
+      - echo "Zipping flink_app directory..."
+      - cd flink_app
+      - zip -r ../flink_app.zip .
+      - cd ..
       
-      - echo "Syncing producer/ to S3..."
+      - echo "Uploading zipped artifact to S3..."
+      - aws s3 cp flink_app.zip s3://nitish-wiki-monitor-code/flink_app.zip
+      
+      - echo "Syncing other code (producer, infra) to S3..."
       - aws s3 sync producer/ s3://nitish-wiki-monitor-code/producer/ --delete
-      
-      - echo "Syncing infra/ to S3..."
       - aws s3 sync infra/ s3://nitish-wiki-monitor-code/infra/ --delete
   
   post_build:
     commands:
-      - echo "Build completed on $(date)"
-      - echo "Code at s3://nitish-wiki-monitor-code/"
+      - echo "Build completed."
+      - echo "Artifact at s3://nitish-wiki-monitor-code/flink_app.zip"

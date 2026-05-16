@@ -45,6 +45,10 @@ def main():
         "pipeline.jars",
         f"file://{kinesis_jar};file://{dynamodb_jar}"
     )
+    t_env.get_config().set(
+    "pipeline.classpaths",
+    f"file://{kinesis_jar};file://{dynamodb_jar}"
+)
 
     logger.info("Loaded Kinesis and DynamoDB connector JARs")
 

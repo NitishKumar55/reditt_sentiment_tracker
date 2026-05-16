@@ -1,6 +1,5 @@
 """
 Real-time Wikipedia Edit Monitor on AWS Managed Flink 1.20
-Using flink-connector-aws-kinesis-streams 5.0.0-1.20 (the v5 source)
 """
 
 import os
@@ -27,7 +26,6 @@ def main():
     )
     t_env.get_config().set("pipeline.jars", f"file://{dynamodb_jar}")
 
-    # Source: Kinesis stream (NEW v5 source — uses 'kinesis' identifier with new properties)
     t_env.execute_sql(f"""
         CREATE TABLE wiki_events (
             id BIGINT,
@@ -49,7 +47,6 @@ def main():
         )
     """)
 
-    # Sink 1: Edit metrics
     t_env.execute_sql(f"""
         CREATE TABLE wiki_edit_metrics_sink (
             wiki STRING,
@@ -65,7 +62,6 @@ def main():
         )
     """)
 
-    # Sink 2: Top pages
     t_env.execute_sql(f"""
         CREATE TABLE wiki_top_pages_sink (
             page_title STRING,
@@ -80,7 +76,6 @@ def main():
         )
     """)
 
-    # Sink 3: Anomalies
     t_env.execute_sql(f"""
         CREATE TABLE wiki_anomalies_sink (
             page_title STRING,

@@ -12,10 +12,10 @@ phases:
       - mkdir -p flink_job/lib
       - cd flink_job/lib
       
-      - echo "Downloading Kinesis connector (no -sql-, the one AWS sample uses)..."
-      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-aws-kinesis-streams/5.0.0-1.20/flink-connector-aws-kinesis-streams-5.0.0-1.20.jar
+      - echo "Downloading SQL Kinesis FAT connector (all deps bundled)..."
+      - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-aws-kinesis-streams/5.0.0-1.20/flink-sql-connector-aws-kinesis-streams-5.0.0-1.20.jar
       
-      - echo "Downloading DynamoDB SQL sink connector..."
+      - echo "Downloading DynamoDB SQL FAT sink connector..."
       - wget -q https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-dynamodb/5.0.0-1.20/flink-sql-connector-dynamodb-5.0.0-1.20.jar
       
       - echo "Verifying..."

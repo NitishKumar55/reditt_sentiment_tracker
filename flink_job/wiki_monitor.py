@@ -1,5 +1,6 @@
 """
 Real-time Wikipedia Edit Monitor on AWS Managed Flink 1.20
+Using flink-connector-aws-kinesis-streams 5.0.0-1.20 (the v5 source)
 """
 
 import os
@@ -12,20 +13,21 @@ logger = logging.getLogger(__name__)
 STREAM_NAME = "wikipedia-que"
 REGION = "ap-south-1"
 ACCOUNT_ID = "141552609063"
+STREAM_ARN = f"arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}"
 
 
 def main():
     env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(env_settings)
 
-    # Load DynamoDB JAR (Kinesis JAR is loaded via 'jarfile' runtime property)
+    # Load DynamoDB JAR (Kinesis JAR loaded via 'jarfile' runtime property)
     current_dir = os.path.dirname(os.path.realpath(__file__))
     dynamodb_jar = os.path.join(
         current_dir, "lib", "flink-sql-connector-dynamodb-5.0.0-1.20.jar"
     )
     t_env.get_config().set("pipeline.jars", f"file://{dynamodb_jar}")
 
-    # Source: Kinesis stream
+    # Source: Kinesis stream (NEW v5 source — uses 'kinesis' identifier with new properties)
     t_env.execute_sql(f"""
         CREATE TABLE wiki_events (
             id BIGINT,
@@ -39,7 +41,7 @@ def main():
             event_time AS PROCTIME()
         ) WITH (
             'connector' = 'kinesis',
-            'stream.arn' = 'arn:aws:kinesis:{REGION}:{ACCOUNT_ID}:stream/{STREAM_NAME}',
+            'stream.arn' = '{STREAM_ARN}',
             'aws.region' = '{REGION}',
             'source.init.position' = 'LATEST',
             'format' = 'json',
